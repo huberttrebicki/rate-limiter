@@ -49,3 +49,44 @@ impl RateLimiter {
         self.allow_n(ip_address, 1.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocks_same_client_after_bucket_is_exhausted() {
+        let limiter = RateLimiter::new();
+
+        for _ in 0..100 {
+            assert!(limiter.allow("127.0.0.1").is_ok());
+        }
+
+        let result = limiter.allow("127.0.0.1");
+        assert!(matches!(result, Err(BucketError::NotEnoughTokens { .. })));
+    }
+
+    #[test]
+    fn tracks_each_client_in_a_separate_bucket() {
+        let limiter = RateLimiter::new();
+
+        for _ in 0..100 {
+            assert!(limiter.allow("127.0.0.1").is_ok());
+        }
+
+        assert!(matches!(
+            limiter.allow("127.0.0.1"),
+            Err(BucketError::NotEnoughTokens { .. })
+        ));
+
+        assert!(limiter.allow("127.0.0.2").is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_batch_size() {
+        let limiter = RateLimiter::new();
+
+        let result = limiter.allow_n("127.0.0.1", 0.0);
+        assert!(matches!(result, Err(BucketError::InvalidTokenAmount(0.0))));
+    }
+}
